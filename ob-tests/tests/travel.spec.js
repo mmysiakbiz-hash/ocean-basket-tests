@@ -83,3 +83,58 @@ test('certificate flow reaches confirmation with QR + certificate-pending order'
   await expect(page.locator('#tb-success-host')).toContainText(/OCB-T/);     // travel order code
   expect(await page.evaluate(() => (window.state.orders[0] || {}).status)).toBe('certificate_pending');
 });
+
+test('regression: adding a fish updates the weight meter on tb-shop (no stale 0 kg)', async ({ page }) => {
+  await openApp(page);
+  await startFlight(page, 1);
+  await page.waitForFunction(() => window.state.screen === 'tb-shop');
+
+  // meter starts empty
+  const before = await page.evaluate(() => {
+    const m = document.getElementById('tb-meter');
+    return { now: m.querySelector('.wm-now').textContent.trim(), reviewDisabled: m.querySelector('.wm-btn').disabled };
+  });
+  expect(before.now).toMatch(/0\.00 kg/);
+  expect(before.reviewDisabled).toBe(true);
+
+  // add a 2-pack jobfish fillet (0.60 kg) via the REAL product-screen button + navigation
+  await page.evaluate(() => window.openProduct('jobfish', true));
+  await page.waitForFunction(() => Array.isArray(window.AVAIL) && window.AVAIL.length > 0);
+  await page.evaluate(() => { window.setPCut('fillet'); window.setPacks(2); });
+  await page.getByRole('button', { name: /Add to Travel Box/i }).click();
+  await page.waitForFunction(() => window.state.tb.items.length > 0 && window.state.screen === 'tb-shop');
+
+  // the meter on tb-shop MUST now reflect the added weight (this is exactly what the bug broke)
+  const after = await page.evaluate(() => {
+    const m = document.getElementById('tb-meter');
+    return {
+      now: m.querySelector('.wm-now').textContent.trim(),
+      pct: m.querySelector('.wm-cap').textContent.trim(),
+      barWidth: m.querySelector('.bar i').style.width,
+      reviewDisabled: m.querySelector('.wm-btn').disabled,
+      tbWeight: window.tbWeight(),
+    };
+  });
+  expect(after.tbWeight).toBeGreaterThan(0);
+  expect(after.now).toMatch(/0\.60 kg/);
+  expect(after.pct).not.toBe('0%');
+  expect(after.barWidth).not.toBe('0%');
+  expect(after.reviewDisabled).toBe(false);
+});
+
+test('collection must be before the flight (with a 1h buffer)', async ({ page }) => {
+  await openApp(page);
+  async function tryTimes(ftime, ctime) {
+    return await page.evaluate(({ ftime, ctime }) => {
+      window.tbStart();
+      window.state.tb.shop = 'plaisance';
+      const d = new Date(Date.now() + 86400000).toISOString().slice(0, 10); // tomorrow
+      el('tb-date').value = d; el('tb-ftime').value = ftime; el('tb-ctime').value = ctime;
+      window.tbValidateFlight();
+      return window.state.screen;
+    }, { ftime, ctime });
+  }
+  expect(await tryTimes('10:00', '11:00')).toBe('tb-flight'); // collection AFTER flight -> blocked
+  expect(await tryTimes('10:00', '09:30')).toBe('tb-flight'); // only 30 min before -> blocked
+  expect(await tryTimes('10:00', '08:00')).toBe('tb-shop');   // 2h before -> accepted
+});
