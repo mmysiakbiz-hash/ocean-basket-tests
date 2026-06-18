@@ -12,10 +12,8 @@ async function startFlight(page, dateDaysFromToday) {
     window.tbStart();
     window.state.tb.shop = 'plaisance';
     const d = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
-    el('tb-cdate').value = d;
-    el('tb-date').value = d;
-    el('tb-ftime').value = '10:00';
-    el('tb-ctime').value = '08:00';
+    el('tb-cdt').value = d + 'T08:00';
+    el('tb-fdt').value = d + 'T10:00';
     window.tbValidateFlight();
   }, dateDaysFromToday);
 }
@@ -130,8 +128,8 @@ test('collection date/time rules (separate collection & flight dates)', async ({
       window.tbStart();
       window.state.tb.shop = 'plaisance';
       const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
-      el('tb-cdate').value = day(cDays); el('tb-ctime').value = ctime;
-      el('tb-date').value = day(fDays); el('tb-ftime').value = ftime;
+      el('tb-cdt').value = day(cDays) + 'T' + ctime;
+      el('tb-fdt').value = day(fDays) + 'T' + ftime;
       window.tbValidateFlight();
       return window.state.screen;
     }, { cDays, fDays, ctime, ftime });
