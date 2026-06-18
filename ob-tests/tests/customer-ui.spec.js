@@ -89,3 +89,43 @@ test('order lookup by code shows the order', async ({ page }) => {
   await page.getByRole('button', { name: 'Find' }).click();
   await expect(page.locator('#orders-host')).toContainText('OCB-L-260618-1002');
 });
+
+test('async action buttons show a loading spinner, then restore', async ({ page }) => {
+  await openApp(page);
+  // delay the order lookup so the spinner is observable mid-flight
+  await page.route('**/order-status**', async (route) => {
+    await new Promise((r) => setTimeout(r, 400));
+    await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+  });
+  await page.evaluate(() => window.go('orders'));
+  await page.fill('#order-lookup', 'OCB-L-XYZ');
+  const find = await page.locator('#s-orders button', { hasText: 'Find' }).elementHandle();
+  await find.click();
+  expect(await find.evaluate((b) => b.classList.contains('is-loading') && b.disabled)).toBeTruthy();
+  await page.waitForFunction((b) => !b.classList.contains('is-loading'), find, { timeout: 3000 });
+});
+
+test('drop points sit on Mahé (real GPS, not a scatter grid)', async ({ page }) => {
+  await openApp(page);
+  const ok = await page.evaluate(() =>
+    Array.isArray(window.POINTS) && window.POINTS.length > 0 &&
+    window.POINTS.every((p) => p.lat > -4.80 && p.lat < -4.55 && p.lng > 55.40 && p.lng < 55.53)
+  );
+  expect(ok).toBeTruthy();
+});
+
+test('support contact uses the real number / WhatsApp / email and clickable links', async ({ page }) => {
+  await openApp(page);
+  const c = await page.evaluate(() => window.CHAT_CONTACT);
+  expect(c.phone).toBe('+248 2 555 666');
+  expect(c.whatsapp).toBe('2482555666');
+  expect(c.email).toBe('sales@oceanbasket.fish');
+  const html = await page.evaluate(() => {
+    if (window.initChat) window.initChat();
+    window.chatHandover();
+    return new Promise((res) => setTimeout(() => res(document.getElementById('chat-wrap').innerHTML), 800));
+  });
+  expect(html).toMatch(/tel:\+2482555666/);
+  expect(html).toMatch(/wa\.me\/2482555666/);
+  expect(html).toMatch(/mailto:sales@oceanbasket\.fish/);
+});
