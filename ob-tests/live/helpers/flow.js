@@ -1,11 +1,7 @@
 const { expect } = require('@playwright/test');
 
-// Places a REAL drop-off order against whatever store `appUrl` points at.
-// Point this at a TEST store so production data is never touched.
-// Assumes the store has stock for jobfish / fresh / fillet (seed v2_03 + v2_08).
 async function placeTestOrder(page, appUrl) {
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
-  // Wait until the REAL catalog from /bootstrap has loaded (not the offline fallback).
   await page.waitForFunction(
     () => typeof window.openProduct === 'function'
       && Array.isArray(window.CATALOG)
@@ -23,4 +19,18 @@ async function placeTestOrder(page, appUrl) {
   await page.waitForFunction(() => window.state && window.state.screen === 'cart');
   await page.evaluate(() => { window.go('delivery'); window.setFulfil('pickup'); window.setPoint(1); window.go('payment'); });
   await page.fill('#f-name', 'Live Smoke Test');
-  await page.fill('#f-phone',
+  await page.fill('#f-phone', '+248 4000000');
+  await page.locator('#payBtn').click();
+  await page.waitForFunction(() => window.state && window.state.screen === 'success', { timeout: 25000 });
+  return page.evaluate(() => ((window.state.orders && window.state.orders[0]) || {}).no || '');
+}
+
+async function adminLogin(page, c) {
+  await page.goto(c.adminUrl, { waitUntil: 'domcontentloaded' });
+  await page.fill('#email', c.email);
+  await page.fill('#password', c.password);
+  await page.locator('#loginBtn').click();
+  await page.waitForSelector('.kpi', { timeout: 30000 });
+}
+
+module.exports = { placeTestOrder, adminLogin };
