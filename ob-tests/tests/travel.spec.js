@@ -12,6 +12,7 @@ async function startFlight(page, dateDaysFromToday) {
     window.tbStart();
     window.state.tb.shop = 'plaisance';
     const d = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+    el('tb-cdate').value = d;
     el('tb-date').value = d;
     el('tb-ftime').value = '10:00';
     el('tb-ctime').value = '08:00';
@@ -122,19 +123,23 @@ test('regression: adding a fish updates the weight meter on tb-shop (no stale 0 
   expect(after.reviewDisabled).toBe(false);
 });
 
-test('collection must be before the flight (with a 1h buffer)', async ({ page }) => {
+test('collection date/time rules (separate collection & flight dates)', async ({ page }) => {
   await openApp(page);
-  async function tryTimes(ftime, ctime) {
-    return await page.evaluate(({ ftime, ctime }) => {
+  function trip(cDays, fDays, ctime, ftime) {
+    return page.evaluate(({ cDays, fDays, ctime, ftime }) => {
       window.tbStart();
       window.state.tb.shop = 'plaisance';
-      const d = new Date(Date.now() + 86400000).toISOString().slice(0, 10); // tomorrow
-      el('tb-date').value = d; el('tb-ftime').value = ftime; el('tb-ctime').value = ctime;
+      const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+      el('tb-cdate').value = day(cDays); el('tb-ctime').value = ctime;
+      el('tb-date').value = day(fDays); el('tb-ftime').value = ftime;
       window.tbValidateFlight();
       return window.state.screen;
-    }, { ftime, ctime });
+    }, { cDays, fDays, ctime, ftime });
   }
-  expect(await tryTimes('10:00', '11:00')).toBe('tb-flight'); // collection AFTER flight -> blocked
-  expect(await tryTimes('10:00', '09:30')).toBe('tb-flight'); // only 30 min before -> blocked
-  expect(await tryTimes('10:00', '08:00')).toBe('tb-shop');   // 2h before -> accepted
+  expect(await trip(1, 1, '11:00', '10:00')).toBe('tb-flight'); // same day, collection AFTER flight -> blocked
+  expect(await trip(1, 1, '09:30', '10:00')).toBe('tb-flight'); // same day, only 30 min before -> blocked
+  expect(await trip(1, 1, '08:00', '10:00')).toBe('tb-shop');   // same day, 2h before -> accepted
+  expect(await trip(1, 2, '23:00', '06:00')).toBe('tb-shop');   // collect day before, fly next morning -> accepted
+  expect(await trip(2, 1, '08:00', '10:00')).toBe('tb-flight'); // flight date before collection -> blocked
+  expect(await trip(0, 0, '08:00', '10:00')).toBe('tb-flight'); // collection date today -> blocked
 });
