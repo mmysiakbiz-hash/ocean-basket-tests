@@ -1,0 +1,32 @@
+name: Ocean Basket live smoke
+on:
+  workflow_dispatch:        # tylko ręcznie
+
+defaults:
+  run:
+    working-directory: ob-tests
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Run live smoke
+        env:
+          CI: 'true'
+          LIVE_APP_URL: ${{ secrets.LIVE_APP_URL }}
+          LIVE_ADMIN_URL: ${{ secrets.LIVE_ADMIN_URL }}
+          ADMIN_TEST_EMAIL: ${{ secrets.ADMIN_TEST_EMAIL }}
+          ADMIN_TEST_PASSWORD: ${{ secrets.ADMIN_TEST_PASSWORD }}
+        run: npx playwright test --config=playwright.live.config.js
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-live
+          path: ob-tests/playwright-report-live/
+          retention-days: 14
