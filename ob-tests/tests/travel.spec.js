@@ -141,3 +141,27 @@ test('collection date/time rules (separate collection & flight dates)', async ({
   expect(await trip(2, 1, '08:00', '10:00')).toBe('tb-flight'); // flight date before collection -> blocked
   expect(await trip(0, 0, '08:00', '10:00')).toBe('tb-flight'); // collection date today -> blocked
 });
+
+test('travel dropdowns: picking shop / destination / airline shows the choice and stores it', async ({ page }) => {
+  await page.goto('ocean-basket-app.html');
+  await page.waitForFunction(() => typeof window.tbStart === 'function');
+  await page.evaluate(() => window.tbStart());
+  await page.waitForSelector('#sel-tbshop');
+  async function pick(id, optIndex) {
+    await page.locator('#' + id + ' .obsel-btn').click();
+    await page.waitForTimeout(80);
+    await page.locator('#' + id + '-menu .obsel-opt').nth(optIndex).click();
+    await page.waitForTimeout(80);
+  }
+  await pick('sel-tbshop', 0);
+  await pick('sel-dest', 1);
+  await pick('sel-air', 2);
+  const r = await page.evaluate(() => ({
+    shopShown: !document.querySelector('#sel-tbshop .obsel-val').classList.contains('placeholder'),
+    destShown: !document.querySelector('#sel-dest .obsel-val').classList.contains('placeholder'),
+    airShown:  !document.querySelector('#sel-air .obsel-val').classList.contains('placeholder'),
+    shop: window.state.tb.shop, dest: window.state.tb.destination, air: window.state.tb.airline,
+  }));
+  expect(r.shopShown && r.destShown && r.airShown).toBe(true);
+  expect(!!(r.shop && r.dest && r.air)).toBe(true);
+});
